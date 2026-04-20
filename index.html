@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud-Based Scalable Text Detection Service</title>
+    <style>
+        :root {
+            --primary: #3498db;
+            --primary-hover: #2980b9;
+            --bg-color: #f8f9fa;
+            --text-color: #2c3e50;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        h1 {
+            font-weight: 600;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: 8px;
+            padding: 40px 20px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .upload-area:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .upload-area p {
+            margin: 0;
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #preview {
+            max-width: 100%;
+            max-height: 250px;
+            margin-top: 15px;
+            display: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            object-fit: contain;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: background 0.3s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        #result-box {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #f1f2f6;
+            border-radius: 8px;
+            display: none;
+            font-family: 'Courier New', Courier, monospace;
+            text-align: left;
+            font-size: 14px;
+            color: #2f3640;
+            white-space: pre-wrap;
+            border-left: 4px solid var(--primary);
+        }
+
+        .loader {
+            color: #e67e22;
+            font-weight: 600;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Text Detection Service</h1>
+    <div class="subtitle">Cloud-Based Scalable Text Detection - Phase 1 (25%)</div>
+    
+    <div class="card">
+        <!-- Hidden file input -->
+        <input type="file" id="imageInput" accept="image/png, image/jpeg, image/jpg">
+        
+        <!-- Upload Click Area -->
+        <div class="upload-area" id="dropZone" onclick="document.getElementById('imageInput').click()">
+            <p>📁 Click to Upload Image (JPG/PNG)</p>
+        </div>
+        
+        <!-- Image Preview -->
+        <img id="preview" alt="Image Preview">
+        
+        <!-- Action Button -->
+        <button id="uploadBtn">Detect Text via Model</button>
+        
+        <!-- JSON Response Display -->
+        <div id="result-box"></div>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const resultBox = document.getElementById('result-box');
+        
+        let selectedFile = null;
+
+        // 1. Handle File Selection and Preview
+        imageInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedFile = file;
+                
+                // Read the file and show preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    // Hide any previous result when a new image is selected
+                    resultBox.style.display = 'none'; 
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 2. Handle POST Request to Flask API via fetch()
+        uploadBtn.addEventListener('click', async function() {
+            // Check if user has uploaded an image
+            if (!selectedFile) {
+                alert("Please select an image first!");
+                return;
+            }
+
+            // Create FormData object to simulate a form submission
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+
+            // Show loading state
+            uploadBtn.disabled = true;
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = '<span class="loader">Sending image to Flask API... Please wait.</span>';
+            
+            try {
+                // Send POST request to backend
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData // No Content-Type header needed for FormData; browser sets it automatically with boundary string
+                });
+                
+                // Parse JSON response
+                const resultJSON = await response.json();
+                
+                // Format and display the JSON response on screen
+                const displayJSON = {
+                    status: resultJSON.status,
+                    result: resultJSON.result,
+                    processing_time: resultJSON.processing_time
+                };
+                resultBox.innerHTML = '<strong>JSON Response:</strong><br><br>' + 
+                                      JSON.stringify(displayJSON, null, 4);
+                                      
+                // If bounding boxes were drawn and the image returned, update the preview
+                if (resultJSON.image_base64) {
+                    preview.src = 'data:image/jpeg;base64,' + resultJSON.image_base64;
+                }
+                                       
+            } catch (error) {
+                // Handle network errors or server downtime
+                console.error('Error connecting to backend:', error);
+                resultBox.innerHTML = '<span style="color:#e74c3c; font-weight:bold;">Error: Could not connect to the server. Is Flask running?</span>';
+            } finally {
+                // Re-enable the button
+                uploadBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
