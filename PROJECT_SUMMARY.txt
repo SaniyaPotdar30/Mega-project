@@ -1,0 +1,125 @@
+================================================================================
+          CRAFT + EAST OCR EXTRACTION HUB - COMPLETE PROJECT SUMMARY
+================================================================================
+
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+The CRAFT + EAST OCR Extraction Hub is an enterprise-grade, end-to-end computer 
+vision and text recognition system. It provides high-accuracy text detection 
+and optical character recognition (OCR) for complex documents, receipts, invoices, 
+and scene images.
+
+The system features dual deep-learning text detection models (CRAFT & EAST), 
+dynamic image enhancement pipelines, spatial layout-preserving box sorting, 
+an OCR extraction engine (EasyOCR/Tesseract), and a modern glassmorphic web 
+dashboard for real-time interaction.
+
+
+2. SYSTEM ARCHITECTURE & COMPONENTS
+--------------------------------------------------------------------------------
+- app.py
+  * Primary Flask Web Server & REST API.
+  * Serves the single-page web dashboard on `/`.
+  * Exposes the POST `/predict` API endpoint.
+  * Handles image decoding, dynamic model routing (CRAFT vs. EAST), annotated 
+    bounding box visualization drawing (neon green badges), and JSON responses.
+
+- detector.py
+  * Text Detection Engine Layer.
+  * CraftDetector: PyTorch-based model utilizing Character Region Awareness 
+    for Text Detection + RefineNet link affinity prediction.
+  * EastDetector: OpenCV DNN-based model using the pre-trained TensorFlow 
+    `frozen_east_text_detection.pb` neural network with rotated geometry 
+    decoding and Non-Maximum Suppression (NMS).
+
+- ocr.py
+  * Optical Character Recognition Engine & Post-Processing.
+  * Supports EasyOCR and Tesseract backends with automatic GPU/CPU detection.
+  * Spatial Box Sorting: Line-grouping algorithm that sorts detected text regions 
+    top-to-bottom and left-to-right to preserve document layout structure.
+  * Indian Rupee (₹) & Price Normalizer: Cleans OCR typos and standardizes 
+    currency strings (e.g., 'Rs.', 'RS', '760.00' -> '₹60.00').
+
+- preprocessor.py
+  * Image Pre-Processing & Contrast Enhancement Suite.
+  * Applies Grayscale conversion, Gaussian Blur, CLAHE (Contrast Limited Adaptive 
+    Histogram Equalization), and Laplacian Sharpening for edge activation.
+
+- index.html
+  * Production Web Dashboard & UI.
+  * Dark-mode glassmorphic interface with CSS HSL gradients and blur effects.
+  * Interactive Drag & Drop file uploader.
+  * Model Selector Toggle: One-click switching between CRAFT and EAST detectors.
+  * Live status badges and multi-phase animated loading spinner.
+  * Dual Viewports: Annotated Bounding Box Visualizer + Text Output Panel.
+  * Real-Time Telemetry Cards: Duration, Region Count, Model Used, Accelerator.
+
+- frozen_east_text_detection.pb
+  * Pre-trained TensorFlow EAST binary model weights (~96.6 MB).
+
+- Dockerfile
+  * Production Container Definition (`python:3.10-slim`).
+  * Pre-installs Tesseract OCR binaries and CPU-optimized PyTorch.
+  * Exposes port 5000 and runs `python app.py`.
+
+
+3. API SPECIFICATION
+--------------------------------------------------------------------------------
+Endpoint: POST /predict
+Content-Type: multipart/form-data
+
+Request Parameters:
+  - image     : File (JPEG / PNG image binary) [Required]
+  - model     : String ('craft' | 'east') [Optional, Default: 'craft']
+  - grayscale : String ('true' | 'false') [Optional, Default: 'true']
+  - blur      : String ('true' | 'false') [Optional, Default: 'true']
+  - contrast  : String ('true' | 'false') [Optional, Default: 'true']
+  - sharpen   : String ('true' | 'false') [Optional, Default: 'true']
+
+Response JSON Contract:
+  {
+    "status": "success",
+    "detected_text": "Extracted document text lines...",
+    "processing_time": "1.85s",
+    "model_used": "CRAFT" | "EAST",
+    "image_base64": "<base64_encoded_jpeg_with_green_bounding_boxes>",
+    "total_text_regions": 12,
+    "craft_boxes_count": 12,
+    "regions": [
+      {
+        "region_index": 1,
+        "box": [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],
+        "rectangle": [startX, startY, width, height],
+        "text": "Extracted line text"
+      }
+    ],
+    "hardware_accelerated": false
+  }
+
+
+4. DOCKER & RUN COMMANDS SUMMARY
+--------------------------------------------------------------------------------
+A. Build Docker Image:
+    docker build -t text-detector-app .
+
+B. Run Container on Port 5000:
+    docker run -d -p 5000:5000 --name ocr-container text-detector-app
+
+C. Check Container Status & Logs:
+    docker ps
+    docker logs -f ocr-container
+
+D. Hot-Copy Updated Files Into Container (Without Rebuilding):
+    docker cp index.html ocr-container:/app/index.html
+    docker cp app.py ocr-container:/app/app.py
+    docker cp detector.py ocr-container:/app/detector.py
+
+E. Restart Container:
+    docker restart ocr-container
+
+F. Run Locally Without Docker:
+    pip install -r requirements.txt
+    python app.py
+    Access in browser at: http://localhost:5000
+
+================================================================================

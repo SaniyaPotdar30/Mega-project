@@ -1,4 +1,26 @@
-flask
-opencv-python
-numpy
-requests
+# PyTorch CPU Wheels repository
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Web API Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+gunicorn>=21.2.0; sys_platform != "win32"
+
+# Core Numerical & Computer Vision Dependencies
+# Note: Keep numpy < 2.0.0 for PyTorch 2.0.1 / CRAFT C-extension ABI stability
+numpy>=1.26.0,<2.0.0
+opencv-python-headless==4.9.0.80
+scipy>=1.11.0,<1.15.0
+pillow>=10.2.0,<11.0.0
+
+# Deep Learning Framework (CPU optimized)
+torch==2.0.1
+torchvision==0.15.2
+
+# Text Detection & OCR Engines
+craft-text-detector==0.4.3
+easyocr>=1.7.2
+pytesseract>=0.3.13
+
+# Utility & Networking
+requests>=2.32.3

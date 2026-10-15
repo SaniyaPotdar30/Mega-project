@@ -40,7 +40,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 40px 20px;
+            padding: 40px 0;
             overflow-x: hidden;
         }
 
@@ -82,8 +82,8 @@
         }
 
         .container {
-            max-width: 1200px;
             width: 100%;
+            padding: 0 20px;
             display: grid;
             grid-template-columns: 420px 1fr;
             gap: 30px;
@@ -464,6 +464,59 @@
             color: #9ca3af;
             line-height: 1.35;
         }
+
+        /* Model Switcher Styles */
+        .model-switch-container {
+            margin-bottom: 20px;
+        }
+
+        .model-switch-label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .model-selector {
+            display: flex;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 5px;
+            gap: 6px;
+        }
+
+        .model-opt {
+            flex: 1;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 12px 14px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .model-opt:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .model-opt.active {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 16px var(--primary-glow);
+        }
     </style>
 </head>
 <body>
@@ -493,6 +546,19 @@
                 <input type="file" id="imageInput" accept="image/png, image/jpeg, image/jpg">
             </div>
 
+            <!-- Model Switcher Control -->
+            <div class="model-switch-container">
+                <label class="model-switch-label">Detection Model Engine</label>
+                <div class="model-selector">
+                    <button type="button" class="model-opt active" data-model="craft" id="btnCraft">
+                        ⚡ CRAFT Detector
+                    </button>
+                    <button type="button" class="model-opt" data-model="east" id="btnEast">
+                        🎯 EAST Detector
+                    </button>
+                </div>
+            </div>
+
             <!-- Execute Extraction button -->
             <button id="extractBtn" class="btn" disabled>
                 <span>🚀</span> Extract Text from Image
@@ -511,14 +577,14 @@
                 <div class="telemetry-card">
                     <div class="telemetry-title">TEXT REGIONS</div>
                     <div class="telemetry-value" id="telemetryRegions">0</div>
-                    <div class="telemetry-subtitle">CRAFT-linked bounding boxes</div>
+                    <div class="telemetry-subtitle">Detected bounding boxes</div>
                 </div>
 
                 <!-- Card 3: Core Engine -->
                 <div class="telemetry-card">
                     <div class="telemetry-title">CORE ENGINE</div>
-                    <div class="telemetry-value gradient-text">CRAFT + PyTorch</div>
-                    <div class="telemetry-subtitle">Refinement Links: Active</div>
+                    <div class="telemetry-value gradient-text" id="telemetryModel">CRAFT</div>
+                    <div class="telemetry-subtitle" id="telemetrySubModel">Refinement Links: Active</div>
                 </div>
 
                 <!-- Card 4: Hardware Accelerator -->
@@ -649,11 +715,11 @@
 
         // 2. Loading phases feedback
         const phases = [
-            "Uploading document to CRAFT pipeline...",
+            "Uploading document to detection pipeline...",
             "Applying grayscale & contrast filters...",
             "Enhancing contours via Laplacian sharpening...",
-            "Running Character Region Awareness model...",
-            "Decoding Link affinity maps inside CRAFT...",
+            "Running text detection model...",
+            "Decoding bounding box predictions...",
             "Sorting character bounding boxes logically...",
             "Extracting textual strings via OCR Engine...",
             "Merging document structures into result..."
@@ -682,12 +748,34 @@
             }
         }
 
+        // Model Switcher state management
+        let activeModel = 'craft';
+        const btnCraft = document.getElementById('btnCraft');
+        const btnEast = document.getElementById('btnEast');
+
+        btnCraft.addEventListener('click', () => {
+            activeModel = 'craft';
+            btnCraft.classList.add('active');
+            btnEast.classList.remove('active');
+            document.getElementById('telemetryModel').textContent = 'CRAFT';
+            document.getElementById('telemetrySubModel').textContent = 'Refinement Links: Active';
+        });
+
+        btnEast.addEventListener('click', () => {
+            activeModel = 'east';
+            btnEast.classList.add('active');
+            btnCraft.classList.remove('active');
+            document.getElementById('telemetryModel').textContent = 'EAST';
+            document.getElementById('telemetrySubModel').textContent = 'OpenCV DNN: Active';
+        });
+
         // 3. API Request Trigger
         extractBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
 
             const formData = new FormData();
             formData.append('image', selectedFile);
+            formData.append('model', activeModel);
             formData.append('grayscale', 'true');
             formData.append('blur', 'true');
             formData.append('contrast', 'true');
@@ -695,7 +783,7 @@
 
             startLoadingIndicator();
             engineBadge.className = "status-badge active";
-            engineBadge.innerHTML = "🌀 Extracting...";
+            engineBadge.innerHTML = `🌀 Extracting (${activeModel.toUpperCase()})...`;
 
             try {
                 const response = await fetch('/predict', {
@@ -706,27 +794,35 @@
                 const data = await response.json();
 
                 if (response.ok && data.status === "success") {
+                    // Get the result for the selected model
+                    const modelResult = data[activeModel] || data;
+
                     // Update main text
-                    extractedTextArea.textContent = data.detected_text;
+                    extractedTextArea.textContent = modelResult.detected_text || data.detected_text || "";
                     copyBtn.disabled = false;
                     
-                    // Update image to visualized base64 with green bounding boxes!
-                    if (data.image_base64) {
-                        preview.src = `data:image/jpeg;base64,${data.image_base64}`;
+                    // Update image to visualized base64 with bounding boxes
+                    const imgBase64 = modelResult.image_base64 || data.image_base64;
+                    if (imgBase64) {
+                        preview.src = `data:image/jpeg;base64,${imgBase64}`;
                     }
 
                     // Update Telemetry metrics
                     if (data.processing_time) {
                         document.getElementById('telemetryDuration').textContent = data.processing_time;
                     }
-                    const regionCount = data.craft_boxes_count !== undefined ? data.craft_boxes_count : (data.total_text_regions || 0);
+                    const regionCount = modelResult.boxes_count || modelResult.total_text_regions || data.craft_boxes_count || data.total_text_regions || 0;
                     document.getElementById('telemetryRegions').textContent = regionCount;
+                    
+                    document.getElementById('telemetryModel').textContent = activeModel.toUpperCase();
+                    document.getElementById('telemetrySubModel').textContent = activeModel === 'east' ? 'OpenCV DNN: Active' : 'Refinement Links: Active';
+                    
                     if (data.hardware_accelerated !== undefined) {
                         document.getElementById('telemetryHardware').textContent = data.hardware_accelerated ? "GPU" : "CPU";
                     }
 
                     engineBadge.className = "status-badge active";
-                    engineBadge.innerHTML = `🟢 Finished (${data.processing_time})`;
+                    engineBadge.innerHTML = `🟢 ${activeModel.toUpperCase()} (${data.processing_time})`;
                 } else {
                     extractedTextArea.textContent = `Error: ${data.error || 'Server error occurred.'}`;
                     engineBadge.className = "status-badge";
@@ -761,3 +857,4 @@
     </script>
 </body>
 </html>
+

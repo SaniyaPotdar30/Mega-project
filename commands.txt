@@ -1,0 +1,73 @@
+================================================================================
+          CRAFT + OCR EXTRACTION HUB - STEP-BY-STEP DOCKER & RUN COMMANDS
+================================================================================
+
+--------------------------------------------------------------------------------
+STEP 1: BUILD THE DOCKER IMAGE
+--------------------------------------------------------------------------------
+Build the Docker container image from the Dockerfile in the project root directory:
+
+    docker build -t text-detector-app .
+
+
+--------------------------------------------------------------------------------
+STEP 2: RUN THE DOCKER CONTAINER
+--------------------------------------------------------------------------------
+Launch the container in detached mode (-d), mapping port 5000 on your host to port 5000 in the container:
+
+    docker run -d -p 5000:5000 --name ocr-container text-detector-app
+
+
+--------------------------------------------------------------------------------
+STEP 3: CHECK CONTAINER STATUS & LOGS
+--------------------------------------------------------------------------------
+Check if the container is currently running:
+
+    docker ps
+
+View live container output and logs:
+
+    docker logs -f ocr-container
+
+
+--------------------------------------------------------------------------------
+STEP 4: HOT-COPY UPDATED FILES INTO RUNNING CONTAINER
+--------------------------------------------------------------------------------
+If you edit local files (such as index.html or app.py) and want to copy them 
+into the running container without rebuilding the image:
+
+    docker cp index.html ocr-container:/app/index.html
+    docker cp app.py ocr-container:/app/app.py
+
+
+--------------------------------------------------------------------------------
+STEP 5: RESTART THE CONTAINER
+--------------------------------------------------------------------------------
+Restart the container so the application reloads the updated code and files:
+
+    docker restart ocr-container
+
+
+--------------------------------------------------------------------------------
+STEP 6: STOP & REMOVE CONTAINER (IF REBUILDING / CLEANING UP)
+--------------------------------------------------------------------------------
+If you need to stop and remove the container to re-run from scratch:
+
+    docker stop ocr-container
+    docker rm ocr-container
+
+
+--------------------------------------------------------------------------------
+STEP 7: RUN LOCALLY WITHOUT DOCKER (OPTIONAL)
+--------------------------------------------------------------------------------
+If running directly on your host machine without Docker:
+
+    # 1. Install dependencies
+    pip install -r requirements.txt
+
+    # 2. Run Flask server
+    python app.py
+
+    # 3. Access in browser
+    http://localhost:5000
+================================================================================

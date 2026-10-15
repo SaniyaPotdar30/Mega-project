@@ -132,7 +132,7 @@ craft_text_detector.get_prediction = patched_get_prediction
 
 # Import our custom production modules
 from preprocessor import preprocess_image
-from detector import CraftDetector
+from detector import CraftDetector, EastDetector
 from ocr import OCREngine
 
 # ==========================================
@@ -163,12 +163,15 @@ print("=" * 60)
 try:
     # Use CUDA dynamically if available
     detector = CraftDetector(use_cuda=None, enable_refiner=True)
+    # Initialize OpenCV DNN EAST text detector
+    east_detector = EastDetector(model_path="frozen_east_text_detection.pb")
     # Default engine: EasyOCR (accurate, self-contained Python fallback).
     # Can also be set to 'tesseract' if Tesseract binary is installed.
     ocr_engine = OCREngine(engine="easyocr", languages=['en'], use_cuda=None)
 except Exception as e:
     print(f"CRITICAL: Failed to load models during server startup: {e}")
     detector = None
+    east_detector = None
     ocr_engine = None
 
 print("=" * 60)
@@ -183,6 +186,9 @@ print("=" * 60)
 def home():
     return app.send_static_file('index.html')
 
+@app.route('/health', methods=['GET'])
+def health():
+    return {"status": "healthy"}, 200
 # ==========================================
 # Predict Route (CRAFT + OCR Text Extraction)
 # ==========================================
@@ -241,101 +247,105 @@ def predict():
         )
 
         # --------------------------------------
-        # 4. CRAFT Text Detection
+        # 4. Text Detection & OCR Pipeline Helper
         # --------------------------------------
-        # We pass the preprocessed image for optimal edge activation
-        boxes = detector.detect_text(preprocessed_image)
-        # Save for offline debugging
-        try:
-            cv2.imwrite('/app/uploaded_test.png', original_image)
-            cv2.imwrite('/app/preprocessed_test.png', preprocessed_image)
-        except Exception as save_err:
-            print(f"DEBUG: Failed to save test images: {save_err}", flush=True)
+        def process_model(model_name, det_boxes, box_color):
+            if det_boxes is None:
+                det_boxes = []
             
-        print(f"DEBUG: Original shape: {original_image.shape}, Preprocessed shape: {preprocessed_image.shape}", flush=True)
-        print(f"DEBUG: Detected boxes type: {type(boxes)}, count: {len(boxes) if boxes is not None else 0}", flush=True)
-
-        # --------------------------------------
-        # 5. Crop and OCR Text Extraction
-        # --------------------------------------
-        # We crop from the ORIGINAL image to preserve color details for the OCR reader
-        merged_text, regions_detail = ocr_engine.process_image_regions(original_image, boxes)
-
-        # --------------------------------------
-        # 6. Visualizing Bounding Boxes & Text
-        # --------------------------------------
-        # Copy the original image to draw bounding boxes
-        visualized_image = original_image.copy()
-        
-        # Draw bounding boxes for ALL detected CRAFT boxes
-        for i, box in enumerate(boxes if boxes is not None else []):
-            pts = np.array(box, np.int32).reshape((-1, 1, 2))
-            # Bright neon green border (BGR: 118, 230, 0)
-            cv2.polylines(visualized_image, [pts], isClosed=True, color=(118, 230, 0), thickness=2)
-
-        # Draw text label badges for regions
-        for region in regions_detail:
-            box = region["box"]
-            text = region["text"]
+            # Crop & OCR extraction
+            text_result, regions_detail = ocr_engine.process_image_regions(original_image, det_boxes)
             
-            # Find top-left coordinate for text labels
-            x_coords = [p[0] for p in box]
-            y_coords = [p[1] for p in box]
-            startX = max(0, int(min(x_coords)))
-            startY = max(0, int(min(y_coords)))
+            # Annotated visualization image
+            vis_img = original_image.copy()
+            for b in det_boxes:
+                pts = np.array(b, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(vis_img, [pts], isClosed=True, color=box_color, thickness=2)
+
+            for region in regions_detail:
+                box = region["box"]
+                txt = region["text"]
+                if txt.strip():
+                    x_coords = [p[0] for p in box]
+                    y_coords = [p[1] for p in box]
+                    startX = max(0, int(min(x_coords)))
+                    startY = max(0, int(min(y_coords)))
+                    
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 0.4
+                    thickness = 1
+                    (tw, th), baseline = cv2.getTextSize(txt, font, font_scale, thickness)
+                    bubble_startY = max(th + 5, startY - 3)
+                    
+                    cv2.rectangle(
+                        vis_img,
+                        (startX, bubble_startY - th - 4),
+                        (startX + tw + 6, bubble_startY + baseline - 2),
+                        box_color,
+                        -1
+                    )
+                    cv2.putText(
+                        vis_img,
+                        txt,
+                        (startX + 3, bubble_startY - 2),
+                        font,
+                        font_scale,
+                        (0, 0, 0),
+                        thickness,
+                        lineType=cv2.LINE_AA
+                    )
             
-            # Draw elegant label overlay if text is extracted
-            if text.strip():
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 0.4
-                thickness = 1
-                
-                (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
-                bubble_startY = max(text_h + 5, startY - 3)
-                
-                # Draw small neon green background for text label
-                cv2.rectangle(
-                    visualized_image,
-                    (startX, bubble_startY - text_h - 4),
-                    (startX + text_w + 6, bubble_startY + baseline - 2),
-                    (118, 230, 0),
-                    -1
-                )
-                
-                # Draw black text inside green badge
-                cv2.putText(
-                    visualized_image,
-                    text,
-                    (startX + 3, bubble_startY - 2),
-                    font,
-                    font_scale,
-                    (0, 0, 0),
-                    thickness,
-                    lineType=cv2.LINE_AA
-                )
+            _, buf = cv2.imencode('.jpg', vis_img)
+            b64_img = base64.b64encode(buf).decode('utf-8')
 
-        # --------------------------------------
-        # 7. Convert Output Image to Base64
-        # --------------------------------------
-        _, buffer = cv2.imencode('.jpg', visualized_image)
-        encoded_image = base64.b64encode(buffer).decode('utf-8')
+            return {
+                "detected_text": text_result,
+                "image_base64": b64_img,
+                "total_text_regions": len(regions_detail),
+                "boxes_count": len(det_boxes),
+                "regions": regions_detail
+            }
 
-        # --------------------------------------
-        # 8. Return JSON Response Contract
-        # --------------------------------------
+        model_choice = request.form.get('model', 'both').lower()
+
+        craft_res = None
+        east_res = None
+
+        if model_choice in ['craft', 'both']:
+            craft_boxes = detector.detect_text(preprocessed_image) if detector is not None else []
+            craft_res = process_model("CRAFT", craft_boxes, box_color=(118, 230, 0)) # Neon Green
+
+        if model_choice in ['east', 'both'] and east_detector is not None:
+            east_boxes = east_detector.detect_text(preprocessed_image)
+            east_res = process_model("EAST", east_boxes, box_color=(0, 165, 255)) # Vibrant Orange
+
         end_time = time.time()
         processing_duration = f"{end_time - start_time:.2f}s"
 
-        return jsonify({
+        if model_choice == 'craft' or (model_choice == 'both' and craft_res and not east_res):
+            primary_res = craft_res
+        elif model_choice == 'east' and east_res:
+            primary_res = east_res
+        else:
+            primary_res = craft_res if craft_res else east_res
+
+        response_payload = {
             "status": "success",
-            "detected_text": merged_text,
+            "model_used": model_choice.upper(),
             "processing_time": processing_duration,
-            "image_base64": encoded_image,
-            "total_text_regions": len(regions_detail),
-            "craft_boxes_count": len(boxes) if boxes is not None else 0,
-            "regions": regions_detail,
-            "hardware_accelerated": detector.cuda
-        }), 200
+            "detected_text": primary_res["detected_text"] if primary_res else "",
+            "image_base64": primary_res["image_base64"] if primary_res else "",
+            "total_text_regions": primary_res["total_text_regions"] if primary_res else 0,
+            "craft_boxes_count": primary_res["boxes_count"] if primary_res else 0,
+            "hardware_accelerated": detector.cuda if detector is not None else False
+        }
+
+        if craft_res:
+            response_payload["craft"] = craft_res
+        if east_res:
+            response_payload["east"] = east_res
+
+        return jsonify(response_payload), 200
 
     except Exception as e:
         import traceback
