@@ -52,4 +52,4 @@ jobs:
           git config --global user.name "Om"
           git add helm/mywebsite-chart/values.yaml
           git commit -m "Update tag in Helm chart"
-          git pu
+          git push
