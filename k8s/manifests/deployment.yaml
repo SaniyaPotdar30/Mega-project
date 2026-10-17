@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: text-detector-app
-          image: omteke/text-detector-app:v2
+          image: omteke/cloud-text-detection 
           imagePullPolicy: Always
           ports:
             - containerPort: 5000

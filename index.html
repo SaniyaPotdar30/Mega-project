@@ -584,7 +584,7 @@
                 <div class="telemetry-card">
                     <div class="telemetry-title">CORE ENGINE</div>
                     <div class="telemetry-value gradient-text" id="telemetryModel">CRAFT</div>
-                    <div class="telemetry-subtitle" id="telemetrySubModel">Refinement Links: Active</div>
+                    <div class="telemetry-subtitle" id="telemetrySubModel">Neural Engine: High-Speed</div>
                 </div>
 
                 <!-- Card 4: Hardware Accelerator -->
@@ -758,7 +758,7 @@
             btnCraft.classList.add('active');
             btnEast.classList.remove('active');
             document.getElementById('telemetryModel').textContent = 'CRAFT';
-            document.getElementById('telemetrySubModel').textContent = 'Refinement Links: Active';
+            document.getElementById('telemetrySubModel').textContent = 'Neural Engine: High-Speed';
         });
 
         btnEast.addEventListener('click', () => {
@@ -766,7 +766,7 @@
             btnEast.classList.add('active');
             btnCraft.classList.remove('active');
             document.getElementById('telemetryModel').textContent = 'EAST';
-            document.getElementById('telemetrySubModel').textContent = 'OpenCV DNN: Active';
+            document.getElementById('telemetrySubModel').textContent = 'OpenCV DNN: Ultra-Fast';
         });
 
         // 3. API Request Trigger
@@ -815,7 +815,8 @@
                     document.getElementById('telemetryRegions').textContent = regionCount;
                     
                     document.getElementById('telemetryModel').textContent = activeModel.toUpperCase();
-                    document.getElementById('telemetrySubModel').textContent = activeModel === 'east' ? 'OpenCV DNN: Active' : 'Refinement Links: Active';
+                    const engineName = data.ocr_engine ? ` + ${data.ocr_engine}` : '';
+                    document.getElementById('telemetrySubModel').textContent = activeModel === 'east' ? `OpenCV DNN${engineName}` : `Neural Engine${engineName}`;
                     
                     if (data.hardware_accelerated !== undefined) {
                         document.getElementById('telemetryHardware').textContent = data.hardware_accelerated ? "GPU" : "CPU";
